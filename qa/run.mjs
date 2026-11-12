@@ -224,6 +224,9 @@ try {
   await p.evaluate(() => { const c = __km.cur(); [...document.querySelectorAll(".ch:not(.ng)")].find((b) => c.P.opts[+b.dataset.j] !== c.P.ans).click(); });
   await p.waitForTimeout(50);
   check("ヒント2のあとに残ったまちがいを選ぶと、正解だけが残る（消した選び肢が戻らない。saibanin-shikumi #1）", await p.locator(".ch.ng").count() === 3 && await p.locator(".ch:not(.ng)").count() === 1 && await p.evaluate(() => { const c = __km.cur(); const b = document.querySelector(".ch:not(.ng)"); return !!b && !b.disabled && c.P.opts[+b.dataset.j] === c.P.ans; }));
+  { const pq = await newPage(); await closeHow(pq); await pq.click("#go-e"); await solve(pq);
+    await pq.evaluate(() => document.getElementById("quit").click()); await pq.waitForTimeout(150);
+    check("とことんで正解した直後に「ここで降りる」を押しても終われる（解いた1問を二重に数えない。kyuyo-meisai #1）", await pq.locator("#eres").count() === 1 && (await pq.textContent("#eres")).includes("1問") && (await mem(pq)).ebest >= 1); await pq.close(); }
   await p.reload(); await p.waitForTimeout(200);
   check("とことんは閉じても続きから", (await p.textContent("#go-e")).includes("続きから"));
   await p.click("#go-e"); await p.click("#quit"); await p.waitForTimeout(150);
@@ -452,6 +455,14 @@ try {
   const sample = { "tkh-v1": JSON.stringify({ v: 1, tut: true, days: { "2026-11-07": { m: [0, 1, 0, 0, 2], k: ["denki", "hekomi", "kagi", "photo", "glass"] } }, hdays: {}, adays: {}, dex: { denki: 1, hekomi: 1, kagi: 1, photo: 1, glass: 1 }, runs: {}, kofi: {}, ach: {}, ebest: 7, t: 1 }), "tkh-fs": "3" };
   await checkTransfer({ browser, url, game: "taikyo-hiyo", sample, check, open: async (pg) => { if (await pg.locator("#howto[open]").count()) await pg.click("#howto-ok"); } });
 } catch (e) { check("引き継ぎの検査が最後まで動く", false, e.message.split("\n")[0]); }
+try {
+  // 保存に失敗したら知らせる（kippu-10 から写した検査。2026-11-07 暑さ指数よみで見つけた。黙って記録が消えないように）
+  { const ps = await browser.newPage(); await ps.goto(url); await ps.waitForTimeout(200);
+    check("保存に失敗したら、保存できるまで知らせ続け、保存できたら消す", await ps.evaluate(async () => { const orig = Storage.prototype.setItem; Storage.prototype.setItem = function () { throw new Error("full"); }; save(() => {}); save(() => {}); const one = document.querySelectorAll("#savewarn").length === 1 && document.getElementById("savewarn").textContent.includes("保存できませんでした"); await new Promise((r) => setTimeout(r, 2500)); const stay = !!document.getElementById("savewarn"); Storage.prototype.setItem = orig; save(() => {}); return one && stay && !document.getElementById("savewarn"); }));
+    check("保存できない帯は画面のいちばん上に場所を取り（ボタンに重ならない）、読み上げの知らせにも出し、ほかの知らせのあとも警告が残る・保存できたら帯と警告が消え、ほかの知らせは残る", await ps.evaluate(async () => { const W = "保存できませんでした", tick = () => new Promise((r) => setTimeout(r, 50)); const orig = Storage.prototype.setItem; Storage.prototype.setItem = function () { throw new Error("full"); }; save(() => {}); const b = document.getElementById("savewarn"); const top = !!b && document.body.firstElementChild === b && getComputedStyle(b).position === "sticky"; const l = document.getElementById("live"); let live = true, kept = true, other = true; if (l) { live = l.textContent.includes(W); l.textContent = ""; await tick(); l.textContent = "べつの知らせ"; await tick(); kept = l.textContent.includes("べつの知らせ") && l.textContent.includes(W); } Storage.prototype.setItem = orig; save(() => {}); await tick(); if (l) other = l.textContent === "べつの知らせ"; return top && live && kept && other && !document.getElementById("savewarn"); }));
+    check("保存できない帯は、長い画面を下までスクロールしても画面の上に見えている（body の高さで止まらない）", await ps.evaluate(async () => { const orig = Storage.prototype.setItem; Storage.prototype.setItem = function () { throw new Error("full"); }; save(() => {}); const pad = document.createElement("div"); pad.style.height = "3000px"; document.body.appendChild(pad); scrollTo(0, document.documentElement.scrollHeight); await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))); const b = document.getElementById("savewarn"), r = b && b.getBoundingClientRect(); const ok = !!r && scrollY > 1000 && r.top >= -1 && r.top < 5; pad.remove(); scrollTo(0, 0); Storage.prototype.setItem = orig; save(() => {}); return ok && !document.getElementById("savewarn"); }));
+    await ps.close(); }
+} catch (e) { check("保存できないときの検査が最後まで動く", false, e.message.split("\n")[0]); }
 await browser.close();
 server.close();
 check("画面のエラーが無い", errors.length === 0, errors.slice(0, 3).join(" | "));
