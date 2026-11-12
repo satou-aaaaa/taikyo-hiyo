@@ -433,7 +433,7 @@ function load() {
   for (const m of new Set([...Object.keys(ra), ...Object.keys(rb)])) {
     const x = ra[m], y = rb[m];
     if (x === undefined || y === undefined) { if (x || y) s.runs[m] = x || y; continue; }
-    if (!x || !y) { const r = x || y; if (!r || bank(s, r) || doneOf(r)) continue; const bd = bookOf(s, r.mode); if (!bd || !bd[r.date]) s.runs[m] = r; continue; }
+    if (!x || !y) { const r = x || y; if (!r || bank(s, r) || doneOf(r)) continue; const bd = bookOf(s, r.mode); if (!bd) continue; if (!bd[r.date]) s.runs[m] = r; continue; } // とことん・練習・復習（日ごとの記録が無い）は新しいほうのまま（終えた回 null を古い途中経過で戻さない。PR #1 の CodeRabbit）
     if (x.id !== y.id && x.date !== y.date) { const [w, l] = x.date > y.date ? [x, y] : [y, x]; bank(s, l); s.runs[m] = w; }
     else if (x.id === y.id) { const px = prog(x), py = prog(y); s.runs[m] = px > py ? x : py > px ? y : n.runs[m]; }
   }
@@ -673,7 +673,7 @@ function chooseWhy(x) {
   solved();
 }
 // この回の「自信あり」の数と当たり（結果の画面に出す。開き直しても残るよう回の記録に入れる）
-function sureCount(ok) { save((s) => { const r = s.runs[MODE]; if (!same(r)) return; r.ds = r.ds || { n: 0, ok: 0 }; r.ds.n++; if (ok) r.ds.ok++; }); }
+function sureCount(ok) { save((s) => { const r = s.runs[MODE]; if (!same(r) || r.dsI === r.res.length) return; r.dsI = r.res.length; r.ds = r.ds || { n: 0, ok: 0 }; r.ds.n++; if (ok) r.ds.ok++; }); } // 1問に1回だけ数える（2つのタブで同じ問題に自信をかけても二重に数えない。PR #1 の CodeRabbit）
 function choose(j) {
   if (cur.done || cur.step === 2) return;
   const t = cur.P.opts[j];
