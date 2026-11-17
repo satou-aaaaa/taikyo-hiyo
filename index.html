@@ -162,7 +162,7 @@ dialog#howto h2{margin:0 0 10px;letter-spacing:.1em}
 dialog#howto ol{padding-left:1.3em;margin:0 0 12px;line-height:1.8}
 dialog#howto p{margin:0 0 10px;font-size:.9rem;line-height:1.7;color:var(--ink2)}
 dialog#howto a{color:var(--shu2);min-height:44px;display:inline-flex;align-items:center}
-.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:12px 18px;border-radius:12px;font-weight:700;z-index:9;box-shadow:0 6px 20px #0005;max-width:90%;text-align:center;font-size:1rem}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:12px 18px;border-radius:12px;font-weight:700;z-index:9;box-shadow:0 6px 20px #0005;max-width:90%;text-align:center;font-size:1rem;pointer-events:none;}
 footer{margin-top:auto;text-align:center;font-size:.8rem;color:var(--ink2);display:flex;gap:4px 14px;justify-content:center;flex-wrap:wrap}
 footer a{color:var(--ink2);min-height:44px;display:inline-flex;align-items:center}
 /* 色の見分けを助ける：判と ✕ を大きく、貸した人の行は太い二重線の枠に */
@@ -700,7 +700,8 @@ function solved() {
   const r = s.runs[MODE], fin = r && r.mode !== "e" && r.res.length >= r.list.length;
   document.querySelectorAll(".ch").forEach((b) => { b.disabled = true; if (P.opts[+b.dataset.j] === P.ans) { b.classList.remove("ng"); b.classList.add("ok"); b.setAttribute("aria-label", P.ans + (P.type === "bill" ? "（貸した人が払う）" : "（正解）")); } });
   document.querySelectorAll(".why button").forEach((b) => (b.disabled = true));
-  if ($("hint")) $("hint").disabled = true; if ($("quit")) $("quit").hidden = true;
+  if ($("hint")) $("hint").disabled = true;
+  if ($("quit") && r) $("quit").textContent = `ここで降りる（${r.res.length}問で終える）`; // 正解した直後も降りられるよう残し、正解した分も数に入れる
   $("hintbox").innerHTML = ""; $("msg").className = "msg"; $("msg").textContent = "";
   $("after").innerHTML = `<div class="verdict" role="status">
     <div class="hd">✓ 見きわめた！ ${starStr(st)}</div>

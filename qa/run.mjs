@@ -225,8 +225,9 @@ try {
   await p.waitForTimeout(50);
   check("ヒント2のあとに残ったまちがいを選ぶと、正解だけが残る（消した選び肢が戻らない。saibanin-shikumi #1）", await p.locator(".ch.ng").count() === 3 && await p.locator(".ch:not(.ng)").count() === 1 && await p.evaluate(() => { const c = __km.cur(); const b = document.querySelector(".ch:not(.ng)"); return !!b && !b.disabled && c.P.opts[+b.dataset.j] === c.P.ans; }));
   { const pq = await newPage(); await closeHow(pq); await pq.click("#go-e"); await solve(pq);
-    await pq.evaluate(() => document.getElementById("quit").click()); await pq.waitForTimeout(150);
-    check("とことんで正解した直後に「ここで降りる」を押しても終われる（解いた1問を二重に数えない。kyuyo-meisai #1）", await pq.locator("#eres").count() === 1 && (await pq.textContent("#eres")).includes("1問") && (await mem(pq)).ebest >= 1); await pq.close(); }
+    const lab = await pq.isVisible("#quit") ? await pq.textContent("#quit") : "（隠れている）";
+    await pq.click("#quit", { timeout: 3000 }).catch(() => {}); await pq.waitForTimeout(150);
+    check("とことんで正解した直後も「ここで降りる」が見えていて（「1問で終える」）、押すと終われる（解いた1問を二重に数えない。kyuyo-meisai #1・2026-11-17）", lab.includes("1問で終える") && await pq.locator("#eres").count() === 1 && (await pq.textContent("#eres")).includes("1問") && (await mem(pq)).ebest >= 1, lab); await pq.close(); }
   await p.reload(); await p.waitForTimeout(200);
   check("とことんは閉じても続きから", (await p.textContent("#go-e")).includes("続きから"));
   await p.click("#go-e"); await p.click("#quit"); await p.waitForTimeout(150);
@@ -467,6 +468,16 @@ try {
     check("2つのタブで同じ問題に自信をかけても、自信の数は1問に1回（PR #1 の CodeRabbit）", await pm.evaluate(() => { __km.save((s) => { s.runs.p = { mode: "p", id: "p1", date: __km.todayKey(), list: ["hekomi|1", "hiyake|1"], res: [], cur: null }; }); __km.play("p"); sureCount(true); sureCount(true); const ds = __km.load().runs.p.ds; return ds.n === 1 && ds.ok === 1; }));
     await pm.close(); }
 } catch (e) { check("保存できないときの検査が最後まで動く", false, e.message.split("\n")[0]); }
+// 知らせ（.toast）が出ているあいだも、その下のボタンを押せる（2026-11-17。知らせがボタンをふさがないように）
+{
+  const ct = await browser.newContext({ viewport: { width: 390, height: 800 } });
+  const pt = await ct.newPage(); await pt.goto(url); await pt.waitForTimeout(300);
+  const at = await pt.evaluate(() => { const d = document.getElementById("howto"); if (d && d.open && d.close) d.close(); toast("おしらせの検査"); const t = [...document.querySelectorAll(".toast")].pop(), r = t.getBoundingClientRect(), b = document.createElement("button"); b.id = "qa-under"; b.textContent = "下"; b.style.cssText = "position:fixed;left:0;bottom:0;width:100%;height:" + (innerHeight - r.top + 10) + "px;z-index:1"; b.onclick = () => { b.dataset.hit = "1"; }; document.body.appendChild(b); return { x: r.left + r.width / 2, y: r.top + r.height / 2, pe: getComputedStyle(t).pointerEvents }; });
+  await pt.mouse.click(at.x, at.y); await pt.waitForTimeout(50);
+  const hit = await pt.evaluate(() => { const b = document.getElementById("qa-under"), on = !!document.querySelector(".toast"), h = b.dataset.hit === "1"; b.remove(); return on && h; });
+  check("知らせ（.toast）が出ているあいだも、その下のボタンを押せる（pointer-events:none）", at.pe === "none" && hit, JSON.stringify(at));
+  await ct.close();
+}
 await browser.close();
 server.close();
 check("画面のエラーが無い", errors.length === 0, errors.slice(0, 3).join(" | "));
