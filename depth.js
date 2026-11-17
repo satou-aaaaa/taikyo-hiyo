@@ -1,5 +1,5 @@
 // 深さの部品（depth.js）：1問の中に2つ目の判断を足す「自信をかける」と、まちがえた問題が間をあけて戻る「復習」。
-// 深さの版: 3
+// 深さの版: 5
 // 正：satou-aaaaa/shared-workflows の template/depth.js（各ゲームはこれをそのまま写す。直すときはひな形を直して配り、版を上げる）
 // 考え（routines/game-dev.md「1問を深くする」）:
 //   - 自信をかける：答える前に「たしか」を押せる（押さなければ「たぶん」）。自分の見立てが当たったかが2つ目の勝負になる。
@@ -11,7 +11,9 @@
 //   <script src="depth.js" data-game="kokoku-minuki" data-key="kokoku-depth"></script>
 //   - 記録は data-key のキー（ゲームの記録とは別）。引き継ぎ（transfer.js）の data-keys にもこのキーを足す。
 //   - 問題の「鍵」は、その鍵だけで同じ問題を作り直せる文字（例 とことんの tag）。種類は鍵の | より前（DEPTH_CONFIG.kindOf で変えられる）。
-//   自信： 問題の画面に Depth.sureHtml() を置き、描いたあとに Depth.bindSure()。
+//   自信： 問題の画面に Depth.sureHtml() を置き、描いたあとに Depth.bindSure(鍵, 回の印)。
+//          回の印は、その回のその問題だけを指す文字（例 cur.id + "|" + cur.i）。別のタブ・開き直したあとで同じ問題に答えても、
+//          judge は最初の1回だけ数え、2回目からは null（版5。shared-workflows #352：別のタブで先に答えると「自信あり」が2回数えられた）。
 //          最初に答えたとき Depth.judge(正解か) → { sure, ok, text }（text を知らせに出す）。同じ問題で2回目からは null。
 //          Depth.runStart() で1回分の数え直し、Depth.runStats() → { n, sure, sureOk }（結果の画面に「たしかの当たり sureOk/sure」）。
 //          Depth.stats() → { sure, sureOk, learned }（実績に使う。learned は復習で覚えた数）。
@@ -29,6 +31,7 @@
   var KEY = cfg.key || (me && me.dataset.key) || GAME + "-depth";
   var GAPS = [1, 3, 7]; // 復習の間（日）
   var MAX = 300; // 復習に置いておく数の上限（古いものから捨てる）
+  var GONE_DAYS = 400; // 「覚えた」で消した印を置いておく日数（保存に失敗したままの古い控えより長く）
   var DUE_MAX = 10; // 1日に出す復習の数
   var kindOf = typeof cfg.kindOf === "function" ? cfg.kindOf : function (k) { return String(k).split("|")[0]; };
   var valid = function () { return true; }; // 作り直せる鍵か（ゲームが setValid で渡す）
@@ -46,7 +49,10 @@
   var num = function (v) { return Number.isFinite(+v) && +v >= 0 ? Math.floor(+v) : 0; };
   var okDate = function (v) { return typeof v === "string" && /^\d{4}-\d\d-\d\d$/.test(v) && Number.isFinite(Date.parse(v + "T00:00:00Z")); };
   // rv はプロトタイプの無い辞書にする（鍵が constructor・__proto__ などでも、もとからある値と混ざらない）
-  var fresh = function () { return { v: 1, rv: Object.create(null), sure: 0, sureOk: 0, learned: 0 }; };
+  // gone は「覚えた」で消した鍵と消した時刻（保存に失敗した控えと合わせるとき、保存済みの古い項目を戻さない。版4、hatsuden-kurabe #1 の CodeRabbit）
+  // at は「自信を数えた回の印」と数えた時刻（別のタブ・開き直しで同じ問題を2回数えない。版5）
+  var AT_MAX = 200; // 回の印を置いておく数（新しいものから）
+  var fresh = function () { return { v: 1, rv: Object.create(null), gone: Object.create(null), at: Object.create(null), sure: 0, sureOk: 0, learned: 0 }; };
 
   // 形を直す（引き継ぎコードなどから入った値で画面を壊さない）
   function tidy(s) {
@@ -61,7 +67,23 @@
       list.push([k, { s: Math.min(num(x.s), GAPS.length - 1), due: x.due, t: num(x.t), lab: typeof x.lab === "string" ? x.lab.slice(0, 60) : "" }]);
     }
     list.sort(function (a, b) { return b[1].t - a[1].t; });
+    var gone = s.gone && typeof s.gone === "object" && !Array.isArray(s.gone) ? s.gone : {};
+    var gl = [];
+    for (var g in gone) {
+      if (!Object.prototype.hasOwnProperty.call(gone, g) || g === "__proto__" || g.length > 200 || !(num(gone[g]) > 0)) continue;
+      gl.push([g, num(gone[g])]);
+    }
+    // 消した印は数で切らない（切ると、保存されている古い分から消した項目が戻る）。GONE_DAYS より古い印だけ捨てる
+    var keepFrom = Date.now() - GONE_DAYS * 864e5;
+    gl.forEach(function (e) { if (e[1] >= keepFrom) o.gone[e[0]] = e[1]; });
+    // 消したあとに書かれていない項目は戻さない（消した時刻より新しく入れ直したものだけ残す）
+    list = list.filter(function (e) { return !(e[0] in o.gone) || e[1].t > o.gone[e[0]]; });
     list.slice(0, MAX).forEach(function (e) { o.rv[e[0]] = e[1]; });
+    var at = s.at && typeof s.at === "object" && !Array.isArray(s.at) ? s.at : {};
+    var al = [];
+    for (var a in at) if (Object.prototype.hasOwnProperty.call(at, a) && a !== "__proto__" && a.length <= 200 && num(at[a]) > 0) al.push([a, num(at[a])]);
+    al.sort(function (x, y) { return y[1] - x[1]; });
+    al.slice(0, AT_MAX).forEach(function (e) { o.at[e[0]] = e[1]; });
     return o;
   }
   function read() {
@@ -75,6 +97,9 @@
     var s = fresh();
     s.sure = Math.max(a.sure, b.sure); s.sureOk = Math.max(a.sureOk, b.sureOk); s.learned = Math.max(a.learned, b.learned);
     [b.rv, a.rv].forEach(function (rv) { for (var k in rv) if (!s.rv[k] || rv[k].t >= s.rv[k].t) s.rv[k] = rv[k]; });
+    // 消した印も合わせる（控えで消した項目を、保存されている分から戻さない。版4）
+    [b.gone, a.gone].forEach(function (gone) { for (var k in gone) if (!(k in s.gone) || gone[k] > s.gone[k]) s.gone[k] = gone[k]; });
+    [b.at, a.at].forEach(function (at) { for (var k in at) if (!(k in s.at) || at[k] > s.at[k]) s.at[k] = at[k]; });
     return tidy(s);
   }
   function write(fn) {
@@ -93,10 +118,12 @@
     var now = Date.now(), d = today();
     write(function (s) {
       var x = s.rv[key];
-      if (bad) { s.rv[key] = { s: 0, due: addDays(d, GAPS[0]), t: now, lab: String(label || (x && x.lab) || "").slice(0, 60) }; return; }
+      // 書いた時刻は、前の項目・消した印より必ず新しくする（端末の時計が戻っても、消した印に負けない）
+      var t = Math.max(now, x ? x.t + 1 : 0, key in s.gone ? s.gone[key] + 1 : 0);
+      if (bad) { delete s.gone[key]; s.rv[key] = { s: 0, due: addDays(d, GAPS[0]), t: t, lab: String(label || (x && x.lab) || "").slice(0, 60) }; return; }
       if (!x || x.due > d) return; // 復習に入っていない・まだ日が来ていない問題は動かさない
-      if (x.s + 1 >= GAPS.length) { delete s.rv[key]; s.learned++; return; }
-      s.rv[key] = { s: x.s + 1, due: addDays(d, GAPS[x.s + 1]), t: now, lab: x.lab };
+      if (x.s + 1 >= GAPS.length) { delete s.rv[key]; s.gone[key] = t; s.learned++; return; }
+      s.rv[key] = { s: x.s + 1, due: addDays(d, GAPS[x.s + 1]), t: t, lab: x.lab };
     });
   }
   // 今日出す鍵：日の来たものを古い順に取り、種類が続かないように並べる
@@ -116,7 +143,7 @@
   function waiting() { var s = read(); return Object.keys(s.rv).length; }
 
   // ---- 自信をかける ----
-  var sureNow = false, judged = false, run = { n: 0, sure: 0, sureOk: 0 };
+  var sureNow = false, judged = false, curAt = null, run = { n: 0, sure: 0, sureOk: 0 };
   function sureHtml() {
     return '<button type="button" class="dp-sure" id="dp-sure" aria-pressed="false">' + label(false) + "</button>";
   }
@@ -128,8 +155,11 @@
     b.textContent = label(sureNow);
     b.disabled = judged;
   }
-  function bindSure(key) {
+  function bindSure(key, at) {
     sureNow = false; judged = false; last = { key: key == null ? null : String(key), sure: false, ok: true };
+    curAt = at == null || at === "" ? null : String(at).slice(0, 200);
+    // 別のタブ・開き直す前に、この回のこの問題をもう数えていたら、ボタンは押せないまま
+    if (curAt !== null && curAt !== "__proto__" && curAt in read().at) judged = true;
     var b = document.getElementById("dp-sure");
     if (b) b.onclick = function () { if (judged) return; sureNow = !sureNow; paintSure(); };
     paintSure();
@@ -138,6 +168,12 @@
   function judge(ok) {
     if (judged) return null;
     judged = true; ok = !!ok;
+    // 回の印があれば、書く直前に読み直して、ほかのタブが先に数えていないか見る（数えていたら数えない）
+    if (curAt !== null && curAt !== "__proto__") {
+      var dup = false;
+      write(function (s) { if (curAt in s.at) dup = true; else s.at[curAt] = Date.now(); });
+      if (dup) { paintSure(); return null; }
+    }
     var sure = sureNow;
     if (last) { last.sure = sure; last.ok = ok; }
     run.n++;
@@ -164,5 +200,5 @@
   }
   if (document.head) style(); else document.addEventListener("DOMContentLoaded", style);
 
-  window.Depth = { VERSION: 2, KEY: KEY, GAPS: GAPS, mark: mark, due: due, count: count, waiting: waiting, setValid: setValid, sureHtml: sureHtml, bindSure: bindSure, judge: judge, runStart: runStart, runStats: runStats, stats: stats, _tidy: tidy };
+  window.Depth = { VERSION: 3, KEY: KEY, GAPS: GAPS, mark: mark, due: due, count: count, waiting: waiting, setValid: setValid, sureHtml: sureHtml, bindSure: bindSure, judge: judge, runStart: runStart, runStats: runStats, stats: stats, _tidy: tidy };
 })();
