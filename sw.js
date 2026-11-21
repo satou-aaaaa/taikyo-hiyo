@@ -10,7 +10,7 @@
 //      長い受信でも保存し直しが終わるまで waitUntil で待つ
 // game:begin
 const CACHE = "tkh-v1"; // 名前は「<ゲームの短い名前>-v<版>」。中身を大きく変えたら版を上げる
-const SHELL = ["./", "./index.html", "./data.js", "./transfer.js", "./depth.js", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png"]; // 画面のファイルを足したらここにも足す
+const SHELL = ["./", "./index.html", "./data.js", "./transfer.js", "./transfer-qr.js", "./depth.js", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png"]; // 画面のファイルを足したらここにも足す
 // game:end
 
 // 同じゲームの古い版（<名前>-v<数字>）だけを消す。同じサイトのほかのゲーム（kotowaza- と kotowaza-bamen- など）の保存には触らない
