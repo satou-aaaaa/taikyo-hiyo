@@ -2037,7 +2037,7 @@ function cal(ym) {
     <div class="calnav"><button class="sub" id="prev" aria-label="前の月"${ym <= ymOf(EPOCH) ? " disabled" : ""}>‹</button><b>${y}年${m}月</b><button class="sub" id="next" aria-label="次の月"${ym >= ymOf(k) ? " disabled" : ""}>›</button></div>
     <div class="cal">${["日", "月", "火", "水", "木", "金", "土"].map((w) => `<span class="wd">${w}</span>`).join("")}${cells.join("")}</div>
     <div class="legend"><span><em style="background:var(--ai)"></em>★★★ まちがいなし</span><span><em style="background:#d5e1f3"></em>★★ 1〜2回</span><span>↺ あとから</span><span>上 上級</span></div>
-    ${late.length ? `<p class="note">▶ の日は、その日の5問をあとから遊べます（過去7日まで・続けた日には数えません）。</p>` : ""}
+    ${late.length ? `<p class="note">▶ の日は、その日の問題をあとから遊べます（過去7日まで・続けた日には数えません）。</p>` : ""}
     ${footer()}`;
   $("back").onclick = home; $("prev").onclick = () => cal(ymAdd(ym, -1)); $("next").onclick = () => cal(ymAdd(ym, 1));
   document.querySelectorAll(".cal .miss").forEach((b) => (b.onclick = () => (lateDays(load()).includes(b.dataset.k) ? startRun("a", b.dataset.k) : cal(ym))));
